@@ -1,34 +1,32 @@
-# Twitter/X Post Discovery Tool
+# Twitter/X Profile Post Scraper
 
-Discover Twitter/X conversations and creators at scale. Give it keywords, get back a CSV of authors with their contact info.
+Scrape tweets from Twitter/X profiles at scale. Give it a list of handles (or profile URLs), get back a CSV of authors with their contact info, top tweets, and engagement data.
 
 **Powered by [Bright Data](https://get.brightdata.com/1tndi4600b25) Twitter/X datasets.**
 
 ## What It Does
 
 ```
-Your Keywords --> Search Tweets --> Find Unique Authors --> Extract Contact Info --> CSV File
+Your Profiles List --> Bright Data Twitter/X API --> Scrape Tweets by Profile --> Extract Contact Info --> CSV File
 ```
 
-1. You provide search keywords (like "ai marketing tools", "saas launch", etc.)
-2. The script searches Twitter/X for tweets matching those keywords
+1. You provide a list of Twitter/X handles or profile URLs
+2. The script sends them to Bright Data's Twitter/X Posts dataset (discover by profile)
 3. It deduplicates by author - keeping the highest-engagement tweet per creator
 4. It extracts contact info: bio, website, email from profiles and tweet text
 5. Everything gets saved to a clean CSV file with one row per author
 
 ## Example Results
 
-Running with keywords `ai marketing tools`, `saas launch`, `indie hacker`:
+Running with profiles `hubspot`, `garyvee`, `elaboratehack`:
 
-| Author        | Handle      | Followers | Email                  | Website          | Keyword      |
-| ------------- | ----------- | --------- | ---------------------- | ---------------- | ------------ |
-| Sarah AI      | @sarahaidev | 45,200    | sarah@sarahaitools.com | sarahaitools.com | ai marketing |
-| Indie Mike    | @indiemike  | 12,800    | mike@indiemike.io      | indiemike.io     | indie hacker |
-| LaunchBot     | @launchbot  | 89,000    | -                      | launchbot.co     | saas launch  |
-| Growth Hacker | @growthhckr | 23,400    | hello@growthhacker.dev | -                | ai marketing |
-| SaaS Queen    | @saasqueen  | 156,000   | -                      | saasqueen.com    | saas launch  |
+| Author Handle  | Author Name     | Followers | Verified | Email             | Website           |
+| -------------- | --------------- | --------- | -------- | ----------------- | ----------------- |
+| @hubspot       | HubSpot         | 893,000   | yes      | -                 | hubspot.com       |
+| @garyvee       | Gary Vaynerchuk | 3,200,000 | yes      | -                 | garyvee.com       |
+| @elaboratehack | Yaron Been      | 5,400     | no       | yaron@example.com | elaboratehack.com |
 
-**From 3 keywords: 200 tweets found, 145 unique authors, 12 emails extracted.**
+**From 3 profiles: tweets scraped, unique authors identified, contact info extracted.**
 
 ## Requirements
 
@@ -64,15 +62,32 @@ $env:BRIGHT_DATA_API_KEY = "your-api-key-here"
 export BRIGHT_DATA_API_KEY=your-api-key-here
 ```
 
-### Step 3: Prepare Your Keywords
+### Step 3: Prepare Your Profiles List
 
-Edit `keywords.csv` with any text editor (Notepad, TextEdit, etc.):
+Edit `profiles.csv` with any text editor (Notepad, TextEdit, etc.):
 
 ```
-keyword
-ai marketing tools
-saas launch
-indie hacker
+username
+hubspot
+garyvee
+elaboratehack
+```
+
+You can also use full URLs:
+
+```
+username
+https://x.com/hubspot
+https://twitter.com/garyvee
+```
+
+Or mix formats -- the script auto-detects:
+
+```
+username
+hubspot
+@garyvee
+https://x.com/elaboratehack
 ```
 
 ## How to Run
@@ -80,7 +95,7 @@ indie hacker
 Open your terminal/command prompt, navigate to this folder, and run:
 
 ```
-python twitter_post_scraper.py keywords.csv output_tweets.csv
+python twitter_post_scraper.py profiles.csv output_tweets.csv
 ```
 
 Or simply:
@@ -89,13 +104,16 @@ Or simply:
 python twitter_post_scraper.py
 ```
 
-This uses the built-in default keywords and saves to `output_tweets.csv`.
+This uses the built-in default profiles and saves to `output_tweets.csv`.
 
 ### What You'll See
 
 ```
-[1/5] Reading keywords from keywords.csv
-  Keywords: ['ai marketing tools', 'saas launch', 'indie hacker']
+[1/5] Reading profiles from profiles.csv
+  Profiles to scrape: 3
+    @hubspot
+    @garyvee
+    @elaboratehack
 
 [2/5] Triggering Bright Data Twitter/X Posts collection...
   Triggering collection with 3 input(s)...
@@ -107,17 +125,17 @@ This uses the built-in default keywords and saves to `output_tweets.csv`.
   Downloading results...
   Got 200 results (198 tweets, 2 errors)
 
-[4/5] Deduplicating 198 tweets by author...
-  Found 145 unique authors
-  Authors with emails: 12
-  Total emails: 12
+[4/5] Extracting contact info from 198 tweets...
+  Found 3 unique authors
+  Authors with emails: 1
+  Total emails: 1
 
 [5/5] Writing output to output_tweets.csv...
 
-Done! 145 authors written to output_tweets.csv
-  Authors with emails: 12
-  Authors with websites: 89
-  Total unique emails: 12
+Done! 3 authors written to output_tweets.csv
+  Authors with emails: 1
+  Authors with websites: 3
+  Total unique emails: 1
 ```
 
 ## Output CSV Format
@@ -126,10 +144,10 @@ The output file has these columns (one row per unique author):
 
 | Column          | Description                                           |
 | --------------- | ----------------------------------------------------- |
-| `keyword`       | Which search keyword(s) found this author             |
 | `author_handle` | Twitter @handle                                       |
 | `author_name`   | Display name                                          |
 | `followers`     | Follower count                                        |
+| `is_verified`   | Whether the account has a verification badge          |
 | `bio`           | Author bio (first 300 characters)                     |
 | `website`       | Website from profile or first external link in tweets |
 | `email`         | Email address(es) found in bio or tweets              |
@@ -140,12 +158,17 @@ The output file has these columns (one row per unique author):
 
 ## How It Works
 
+### Profile-Based Discovery
+
+The script uses Bright Data's `discover_by=profile_url` mode to fetch tweets from specific Twitter/X profiles. For each handle in your list, it constructs a profile URL (`https://x.com/{handle}`) and sends it to the API.
+
+This is different from keyword search -- you're targeting specific accounts rather than searching for topics.
+
 ### Author Deduplication
 
 If the same author appears in multiple tweet results, the script keeps only one row with:
 
 - The **highest-engagement tweet** (likes + retweets)
-- All **keywords** that matched their tweets (semicolon-separated)
 - **Merged emails** from all their tweets and bio
 
 ### Email Extraction
@@ -162,16 +185,15 @@ False positives are filtered out (image files, noreply addresses, placeholder em
 The script looks for websites in:
 
 1. **Profile URL** field - The website listed in their Twitter profile
-2. **Tweet URLs** - External links shared in their tweets (filtering out twitter.com, t.co, etc.)
+2. **Tweet URLs** - External links shared in their tweets (filtering out twitter.com, x.com, t.co, etc.)
 
 ## Tips
 
 - **Twitter bios are goldmines**: Many creators and founders list their email or website in their bio
 - **Smaller accounts respond more**: Authors with 1K-50K followers have the highest reply rates for outreach
-- **Niche keywords work best**: "react native developer" finds more relevant contacts than "programming"
-- **Hashtag keywords work too**: Try "#buildinpublic", "#indiehackers", "#saas"
+- **Target niche creators**: Build a focused list of profiles in your industry for better results
 - **Check websites**: Even without an email, the website field often leads to contact pages
-- **Founders are responsive**: Search for "just launched", "building", "shipped" to find active founders
+- **Founders are responsive**: Target profiles of people who are actively building and shipping
 - **No rate limits**: Bright Data handles all the scraping infrastructure
 
 ## Sending Emails (Google Apps Script)
@@ -187,6 +209,24 @@ The `apps_script.gs` file is a Google Apps Script that sends personalized outrea
 5. Save and refresh the sheet
 6. Use the new **Outreach** menu to send emails
 
+## Running Tests
+
+The project includes unit tests and end-to-end tests against the live Bright Data API.
+
+```bash
+# Install pytest (if not already installed)
+pip install pytest
+
+# Run unit tests only (no API key needed, runs in <1 second)
+pytest -m "not e2e" -v
+
+# Run everything including live API tests (requires API key, ~2-3 minutes)
+export BRIGHT_DATA_API_KEY=your-api-key-here
+pytest -v
+```
+
+E2E tests are automatically skipped when no API key is set.
+
 ## Troubleshooting
 
 | Problem                               | Solution                                                               |
@@ -194,21 +234,21 @@ The `apps_script.gs` file is a Google Apps Script that sends personalized outrea
 | `ERROR: Set your Bright Data API key` | You forgot to set the environment variable (see Setup Step 2)          |
 | `HTTP 401`                            | Your API key is wrong or expired                                       |
 | `HTTP 400`                            | Check that your Bright Data account has the Twitter/X datasets enabled |
-| `Collection timed out`                | Try with fewer keywords or check your internet connection              |
+| `Collection timed out`                | Try with fewer profiles or check your internet connection              |
 | Script hangs at "Triggering..."       | The API call can take 30-60 seconds, this is normal                    |
-| `0 authors found`                     | Your keywords might be too niche. Try broader terms                    |
+| `0 authors found`                     | The profiles might not have recent tweets, try other accounts          |
 
 ## Cost
 
 This uses Bright Data's **Web Scraper API** with one Twitter/X dataset:
 
-- **Twitter/X Posts** dataset: discovers tweets by keyword and extracts author info
+- **Twitter/X Posts** dataset: discovers tweets by profile and extracts author info
 
-Pricing depends on your Bright Data plan. A typical run with 3 keywords costs roughly a few cents.
+Pricing depends on your Bright Data plan. A typical run with 3 profiles costs roughly a few cents.
 
 ## Disclaimer
 
-Some links in this README are affiliate links. If you sign up for Bright Data through them, you may get extra credits on your account, and I may receive a small commission. This doesn't cost you anything extra - it helps support the project.
+Some links in this README are affiliate links. If you sign up for Bright Data through them, you may get extra credits on your account, and I may receive a small commission. This doesn't cost you anything extra -- it helps support the project.
 
 ## License
 

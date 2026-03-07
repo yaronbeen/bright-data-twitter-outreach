@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Twitter/X Post Discovery Tool via Bright Data.
+"""Twitter/X Profile Post Scraper via Bright Data.
 
-Workflow: Keywords CSV -> BD Twitter Posts Dataset -> Extract tweets + author info -> Deduplicate by author -> Output CSV
+Workflow: Profiles CSV (handles or URLs) -> BD Twitter Posts Dataset (discover by profile) -> Extract tweets + contact info -> Output CSV
 
 Usage:
-    python twitter_post_scraper.py keywords.csv output_tweets.csv
+    python twitter_post_scraper.py profiles.csv output_tweets.csv
+
+Or simply:
+    python twitter_post_scraper.py
+
+This uses the built-in default profiles and saves to output_tweets.csv.
 
 Requires:
     - Python 3.9+
@@ -25,13 +30,6 @@ from urllib.error import HTTPError, URLError
 # CONFIGURATION - Set your API key as an environment variable
 # ============================================================
 API_KEY = os.environ.get("BRIGHT_DATA_API_KEY", "")
-if not API_KEY:
-    print("ERROR: Set your Bright Data API key:")
-    print("  Windows:  set BRIGHT_DATA_API_KEY=your-api-key-here")
-    print("  Mac/Linux: export BRIGHT_DATA_API_KEY=your-api-key-here")
-    print()
-    print("Get your API key from: https://brightdata.com/cp/setting/users")
-    sys.exit(1)
 
 # Bright Data dataset ID
 POSTS_DATASET_ID = "gd_lwxkxvnf1cynvib9co"  # Twitter/X - Posts
@@ -78,11 +76,11 @@ INTERNAL_DOMAINS = {
     "abs.twimg.com",
 }
 
-# Default keywords used when no CSV is provided
-DEFAULT_KEYWORDS = [
-    "ai marketing tools",
-    "saas launch",
-    "indie hacker",
+# Default profiles used when no CSV is provided
+DEFAULT_PROFILES = [
+    "hubspot",
+    "garyvee",
+    "elaboratehack",
 ]
 
 
@@ -112,25 +110,69 @@ def api_request(method, url, data=None):
         raise
 
 
-def read_keywords_csv(path):
-    """Read keywords from a CSV file.
+def normalize_handle(raw):
+    """Normalize a Twitter handle or URL to a plain username (no @).
 
-    Expected format:
-        keyword
-        ai marketing tools
-        saas launch
+    Accepts: 'hubspot', '@hubspot', 'https://x.com/hubspot',
+             'https://twitter.com/hubspot', 'twitter.com/hubspot'
+    Returns: 'hubspot'
     """
-    keywords = []
+    if not raw:
+        return ""
+    s = str(raw).strip()
+    # Strip URL prefix
+    for prefix in (
+        "https://www.twitter.com/",
+        "http://www.twitter.com/",
+        "https://twitter.com/",
+        "http://twitter.com/",
+        "https://www.x.com/",
+        "http://www.x.com/",
+        "https://x.com/",
+        "http://x.com/",
+        "www.twitter.com/",
+        "twitter.com/",
+        "www.x.com/",
+        "x.com/",
+    ):
+        if s.lower().startswith(prefix):
+            s = s[len(prefix) :]
+            break
+    # Remove trailing slash and path components
+    s = s.split("/")[0].split("?")[0].strip()
+    # Remove @ prefix
+    s = s.lstrip("@")
+    return s
+
+
+def read_profiles_csv(path):
+    """Read Twitter profiles from a CSV file.
+
+    Accepts any of these column headers:
+        username, handle, profile, url
+
+    Accepts any of these value formats:
+        hubspot
+        @hubspot
+        https://x.com/hubspot
+        https://twitter.com/hubspot
+    """
+    HEADER_NAMES = {"username", "handle", "profile", "url", "screen_name", "user"}
+    profiles = []
     with open(path, newline="", encoding="utf-8") as f:
         reader = csv.reader(f)
         header = next(reader, None)
-        if header and header[0].lower().strip() not in ("keyword", "keywords"):
-            keywords.append(header[0].strip())
+        if header and header[0].lower().strip() not in HEADER_NAMES:
+            val = normalize_handle(header[0])
+            if val:
+                profiles.append(val)
         for row in reader:
             if not row or not row[0].strip():
                 continue
-            keywords.append(row[0].strip())
-    return keywords
+            val = normalize_handle(row[0])
+            if val:
+                profiles.append(val)
+    return profiles
 
 
 def trigger_collection(dataset_id, inputs, discover_by=None):
@@ -275,25 +317,37 @@ def main():
     input_csv = sys.argv[1] if len(sys.argv) > 1 else None
     output_csv = sys.argv[2] if len(sys.argv) > 2 else "output_tweets.csv"
 
-    # == Step 1: Get keywords =============================================
+    if not API_KEY:
+        print("ERROR: Set your Bright Data API key:")
+        print("  Windows:  set BRIGHT_DATA_API_KEY=your-api-key-here")
+        print("  Mac/Linux: export BRIGHT_DATA_API_KEY=your-api-key-here")
+        print()
+        print("Get your API key from: https://brightdata.com/cp/setting/users")
+        sys.exit(1)
+
+    # == Step 1: Read profiles ================================================
     if input_csv and os.path.exists(input_csv):
-        print(f"[1/5] Reading keywords from {input_csv}")
-        keywords = read_keywords_csv(input_csv)
+        print(f"[1/5] Reading profiles from {input_csv}")
+        profiles = read_profiles_csv(input_csv)
     else:
-        print("[1/5] Using default keywords (no CSV provided)")
-        keywords = DEFAULT_KEYWORDS
+        print("[1/5] Using default profiles (no CSV provided)")
+        profiles = list(DEFAULT_PROFILES)
 
-    print(f"  Keywords: {keywords}")
+    print(f"  Profiles to scrape: {len(profiles)}")
+    for p in profiles[:10]:
+        print(f"    @{p}")
+    if len(profiles) > 10:
+        print(f"    ... and {len(profiles) - 10} more")
 
-    # == Step 2: Trigger post search ======================================
+    # == Step 2: Trigger post discovery by profile ============================
     print("\n[2/5] Triggering Bright Data Twitter/X Posts collection...")
-    post_inputs = [{"keyword": kw} for kw in keywords]
+    post_inputs = [{"url": f"https://x.com/{handle}"} for handle in profiles]
     post_snapshot_id = trigger_collection(
-        POSTS_DATASET_ID, post_inputs, discover_by="keyword"
+        POSTS_DATASET_ID, post_inputs, discover_by="profile_url"
     )
     print(f"  Snapshot ID: {post_snapshot_id}")
 
-    # == Step 3: Wait + download ==========================================
+    # == Step 3: Wait + download ==============================================
     print("\n[3/5] Waiting for collection to complete (this may take 2-5 minutes)...")
     poll_until_ready(post_snapshot_id)
 
@@ -309,27 +363,18 @@ def main():
         f"  Got {len(tweets)} results ({len(tweets) - len(errors)} tweets, {len(errors)} errors)"
     )
 
-    # == Step 4: Deduplicate by author ====================================
-    print(f"\n[4/5] Deduplicating {len(tweets) - len(errors)} tweets by author...")
+    # == Step 4: Deduplicate by author ========================================
+    print(f"\n[4/5] Extracting contact info from {len(tweets) - len(errors)} tweets...")
     authors_map = {}  # handle -> best tweet data
 
     for tweet in tweets:
         if tweet.get("error"):
             continue
 
-        # Extract which keyword found this tweet
-        kw = ""
-        if isinstance(tweet.get("discovery_input"), dict):
-            kw = tweet["discovery_input"].get("keyword", "")
-        if not kw and isinstance(tweet.get("input"), dict):
-            inp = tweet["input"]
-            kw = inp.get("keyword", "")
-            if not kw and isinstance(inp.get("discovery_input"), dict):
-                kw = inp["discovery_input"].get("keyword", "")
-
-        # Author info
+        # Author info from tweet (docs: user_posted, name, followers, biography)
         handle = (
-            tweet.get("user_name", "")
+            tweet.get("user_posted", "")
+            or tweet.get("user_name", "")
             or tweet.get("screen_name", "")
             or tweet.get("author", "")
             or ""
@@ -340,48 +385,57 @@ def main():
             handle = f"@{handle}"
 
         display_name = (
-            tweet.get("user_display_name", "")
-            or tweet.get("name", "")
+            tweet.get("name", "")
+            or tweet.get("user_display_name", "")
             or tweet.get("author_name", "")
             or ""
         )
         followers = parse_follower_count(
             tweet.get(
-                "user_followers",
-                tweet.get("followers_count", tweet.get("user_follower_count", 0)),
+                "followers",
+                tweet.get(
+                    "user_followers",
+                    tweet.get("followers_count", 0),
+                ),
             )
         )
         bio = (
-            tweet.get("user_description", "")
+            tweet.get("biography", "")
+            or tweet.get("user_description", "")
             or tweet.get("user_bio", "")
             or tweet.get("bio", "")
             or ""
         )
         website = (
-            tweet.get("user_url", "")
+            tweet.get("external_url", "")
+            or tweet.get("user_url", "")
             or tweet.get("user_website", "")
             or tweet.get("website", "")
             or ""
         )
+        is_verified = bool(
+            tweet.get("is_verified", False) or tweet.get("verified", False)
+        )
 
-        # Tweet content
+        # Tweet content (docs: description, url, likes, reposts, views)
         text = (
-            tweet.get("text", "")
+            tweet.get("description", "")
+            or tweet.get("text", "")
             or tweet.get("tweet_text", "")
             or tweet.get("content", "")
             or ""
         )
         tweet_url = (
-            tweet.get("tweet_url", "")
-            or tweet.get("url", "")
+            tweet.get("url", "")
+            or tweet.get("tweet_url", "")
             or tweet.get("post_url", "")
             or ""
         )
         likes = parse_follower_count(
-            tweet.get("like_count", tweet.get("likes", tweet.get("favorite_count", 0)))
+            tweet.get("likes", tweet.get("like_count", tweet.get("favorite_count", 0)))
         )
         retweets = parse_follower_count(
-            tweet.get("retweet_count", tweet.get("retweets", 0))
+            tweet.get("reposts", tweet.get("retweet_count", tweet.get("retweets", 0)))
         )
 
         # Calculate engagement score for dedup
@@ -400,7 +454,6 @@ def main():
 
         if handle not in authors_map or engagement > authors_map[handle]["engagement"]:
             authors_map[handle] = {
-                "keyword": kw,
                 "handle": handle,
                 "display_name": display_name,
                 "followers": followers,
@@ -412,11 +465,9 @@ def main():
                 "likes": likes,
                 "retweets": retweets,
                 "engagement": engagement,
-                "keywords": {kw} if kw else set(),
+                "is_verified": is_verified,
             }
         else:
-            if kw:
-                authors_map[handle]["keywords"].add(kw)
             # Merge emails
             existing_emails = set(authors_map[handle]["emails"])
             for e in emails:
@@ -435,10 +486,10 @@ def main():
 
         rows.append(
             {
-                "keyword": "; ".join(sorted(data["keywords"])),
                 "author_handle": data["handle"],
                 "author_name": data["display_name"],
                 "followers": data["followers"] if data["followers"] else "",
+                "is_verified": "yes" if data["is_verified"] else "no",
                 "bio": str(data["bio"])[:300],
                 "website": str(data["website"])[:200],
                 "email": email_str,
@@ -452,13 +503,13 @@ def main():
     print(f"  Authors with emails: {sum(1 for r in rows if r['email'])}")
     print(f"  Total emails: {email_count}")
 
-    # == Step 5: Write output CSV =========================================
+    # == Step 5: Write output CSV =============================================
     print(f"\n[5/5] Writing output to {output_csv}...")
     fieldnames = [
-        "keyword",
         "author_handle",
         "author_name",
         "followers",
+        "is_verified",
         "bio",
         "website",
         "email",
