@@ -246,6 +246,14 @@ This uses Bright Data's **Web Scraper API** with one Twitter/X dataset:
 
 Pricing depends on your Bright Data plan. A typical run with 3 profiles costs roughly a few cents.
 
+## Need a custom scraper?
+
+If you need different Twitter/X data fields or a collection flow this tool does not support, you can build your own with [Bright Data's Scraper Studio](https://brightdata.com/products/scraper-studio). Describe the Twitter/X data you need in plain English, and Scraper Studio generates a production-ready scraper with your exact output schema. It includes self-healing, so when X changes its page layout, you describe the fix and push a patch in minutes instead of rewriting parsers.
+
+## Free tier
+
+Every Bright Data account comes with 5,000 free credits per month (roughly $7.50 in value). Credits reset on the first of each month, and no credit card is needed to start. That is enough to scrape tweets from several profiles, verify the email and contact extraction, and evaluate whether this tool fits your outreach workflow.
+
 ## Disclaimer
 
 Some links in this README are affiliate links. If you sign up for Bright Data through them, you may get extra credits on your account, and I may receive a small commission. This doesn't cost you anything extra -- it helps support the project.
