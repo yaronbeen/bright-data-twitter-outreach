@@ -1,262 +1,95 @@
-# Twitter/X Profile Post Scraper
+# X (Twitter) Profile Post Research
 
-Scrape tweets from Twitter/X profiles at scale. Give it a list of handles (or profile URLs), get back a CSV of authors with their contact info, top tweets, and engagement data.
+Need a consistent snapshot of posts from a specific set of X accounts? Provide profile handles or URLs and this Python script collects returned posts through Bright Data's X/Twitter Posts dataset, groups them by author, and writes a CSV with profile details, a highest-engagement returned post, basic counters, and email-like strings found in the profile bio or post text. It helps a researcher compare a hand-picked account list without copying fields one by one; it does not discover accounts or establish that anyone is a prospect.
 
-**Powered by [Bright Data](https://get.brightdata.com/1tndi4600b25) Twitter/X datasets.**
+## The useful outcome
 
-## What It Does
+Use it when you already know which public accounts you want to inspect, for example a manually assembled set of companies or creators in a niche. Review the CSV to identify relevant themes, public websites, and posts worth opening in context.
 
-```
-Your Profiles List --> Bright Data Twitter/X API --> Scrape Tweets by Profile --> Extract Contact Info --> CSV File
-```
+Illustrative input and possible output (synthetic values):
 
-1. You provide a list of Twitter/X handles or profile URLs
-2. The script sends them to Bright Data's Twitter/X Posts dataset (discover by profile)
-3. It deduplicates by author - keeping the highest-engagement tweet per creator
-4. It extracts contact info: bio, website, email from profiles and tweet text
-5. Everything gets saved to a clean CSV file with one row per author
-
-## Example Results
-
-Running with profiles `hubspot`, `garyvee`, `elaboratehack`:
-
-| Author Handle  | Author Name     | Followers | Verified | Email             | Website           |
-| -------------- | --------------- | --------- | -------- | ----------------- | ----------------- |
-| @hubspot       | HubSpot         | 893,000   | yes      | -                 | hubspot.com       |
-| @garyvee       | Gary Vaynerchuk | 3,200,000 | yes      | -                 | garyvee.com       |
-| @elaboratehack | Yaron Been      | 5,400     | no       | yaron@example.com | elaboratehack.com |
-
-**From 3 profiles: tweets scraped, unique authors identified, contact info extracted.**
-
-## Requirements
-
-- **Python 3.9 or higher** (comes pre-installed on most Macs; [download for Windows](https://www.python.org/downloads/))
-- **Bright Data account** with API access ([sign up here](https://get.brightdata.com/1tndi4600b25) - you'll get extra credits when signing up through this link)
-- No extra libraries needed - uses only Python built-in modules
-
-## Setup (5 minutes)
-
-### Step 1: Get Your Bright Data API Key
-
-1. Log into [Bright Data](https://get.brightdata.com/1tndi4600b25)
-2. Go to **Settings > Account settings**
-3. Copy your **API token**
-
-### Step 2: Set Your API Key
-
-**On Windows** (Command Prompt):
-
-```
-set BRIGHT_DATA_API_KEY=your-api-key-here
-```
-
-**On Windows** (PowerShell):
-
-```
-$env:BRIGHT_DATA_API_KEY = "your-api-key-here"
-```
-
-**On Mac/Linux** (Terminal):
-
-```
-export BRIGHT_DATA_API_KEY=your-api-key-here
-```
-
-### Step 3: Prepare Your Profiles List
-
-Edit `profiles.csv` with any text editor (Notepad, TextEdit, etc.):
-
-```
+```csv
 username
-hubspot
-garyvee
-elaboratehack
+sample_company
+sample_founder
 ```
 
-You can also use full URLs:
+The script requests posts from those profiles, then produces one row per returned author. It keeps the tweet with the largest sum of likes and reposts among the returned records and merges email matches across records. That is a sorting shortcut, not a quality score, a complete account history, or proof that the selected post performs well outside the collected sample.
 
+## What it does and does not do
+
+- Accepts handles, `@handles`, and X/Twitter profile URLs you provide.
+- Collects posts via Bright Data's X/Twitter Posts dataset in profile-discovery mode.
+- Deduplicates returned records by author; retains the highest likes-plus-reposts post from those records and merges email matches.
+- Does not search for accounts by topic, verify emails, infer buying intent, measure campaign results, or send DMs/emails.
+- `apps_script.gs` is an optional, separate Gmail sender. It can send real email when run; it is not invoked by this scraper.
+
+## Start here
+
+Requirements: Python 3.9+, internet access, and a Bright Data API token/account enabled for the X/Twitter Posts dataset. Python's standard library is sufficient. The script reads `BRIGHT_DATA_API_KEY` from the process environment; there is no `.env` auto-loader.
+
+Linux/macOS:
+
+```bash
+export BRIGHT_DATA_API_KEY="your-key"
+python3 twitter_post_scraper.py profiles.csv output_tweets.csv
 ```
-username
-https://x.com/hubspot
-https://twitter.com/garyvee
-```
 
-Or mix formats -- the script auto-detects:
+PowerShell:
 
-```
-username
-hubspot
-@garyvee
-https://x.com/elaboratehack
-```
-
-## How to Run
-
-Open your terminal/command prompt, navigate to this folder, and run:
-
-```
+```powershell
+$env:BRIGHT_DATA_API_KEY = "your-key"
 python twitter_post_scraper.py profiles.csv output_tweets.csv
 ```
 
-Or simply:
+Example input:
 
-```
-python twitter_post_scraper.py
-```
-
-This uses the built-in default profiles and saves to `output_tweets.csv`.
-
-### What You'll See
-
-```
-[1/5] Reading profiles from profiles.csv
-  Profiles to scrape: 3
-    @hubspot
-    @garyvee
-    @elaboratehack
-
-[2/5] Triggering Bright Data Twitter/X Posts collection...
-  Triggering collection with 3 input(s)...
-  Snapshot ID: sd_abc123xyz
-
-[3/5] Waiting for collection to complete (this may take 2-5 minutes)...
-  Status: running (0s elapsed)
-  Status: ready (75s elapsed)
-  Downloading results...
-  Got 200 results (198 tweets, 2 errors)
-
-[4/5] Extracting contact info from 198 tweets...
-  Found 3 unique authors
-  Authors with emails: 1
-  Total emails: 1
-
-[5/5] Writing output to output_tweets.csv...
-
-Done! 3 authors written to output_tweets.csv
-  Authors with emails: 1
-  Authors with websites: 3
-  Total unique emails: 1
+```csv
+username
+sample_company
+@sample_founder
+https://x.com/sample_publication
 ```
 
-## Output CSV Format
+With no input path, the script uses its built-in example profiles and writes `output_tweets.csv`. Use an existing CSV to collect your own selected accounts.
 
-The output file has these columns (one row per unique author):
+## Output
 
-| Column          | Description                                           |
-| --------------- | ----------------------------------------------------- |
-| `author_handle` | Twitter @handle                                       |
-| `author_name`   | Display name                                          |
-| `followers`     | Follower count                                        |
-| `is_verified`   | Whether the account has a verification badge          |
-| `bio`           | Author bio (first 300 characters)                     |
-| `website`       | Website from profile or first external link in tweets |
-| `email`         | Email address(es) found in bio or tweets              |
-| `top_tweet`     | Their highest-engagement tweet text (first 280 chars) |
-| `tweet_url`     | Link to the tweet                                     |
-| `likes`         | Like count on the top tweet                           |
-| `retweets`      | Retweet count on the top tweet                        |
+One row per author represented in the collected post results. Columns: `author_handle`, `author_name`, `followers`, `is_verified`, `bio` (up to 300 characters), `website`, `email`, `top_tweet` (up to 280 characters), `tweet_url`, `likes`, and `retweets`. The `website` may come from the profile or the first external URL detected in tweet text. Emails and links are extracted from returned text and are not independently validated.
 
-## How It Works
+## Cost and responsible use
 
-### Profile-Based Discovery
+This command performs a live collection request. Bright Data pricing, credits, dataset access, and result counts depend on your account and current service terms. Check [current Web Scraper pricing](https://brightdata.com/pricing/web-scraper) and account billing before running; no fixed per-run charge or output count is promised. The scraper does not log in to X. Follow platform terms, applicable privacy and marketing laws, and internal retention rules. Public profile information is not permission to contact someone.
 
-The script uses Bright Data's `discover_by=profile_url` mode to fetch tweets from specific Twitter/X profiles. For each handle in your list, it constructs a profile URL (`https://x.com/{handle}`) and sends it to the API.
+## Optional email sending
 
-This is different from keyword search -- you're targeting specific accounts rather than searching for topics.
+The separate `apps_script.gs` file can send messages through Gmail from a Google Sheet. The default sheet tab is `Sheet1`, with A-F columns in this order: `profile_name`, `email`, `followers`, `subject`, `body`, `status`. Inspect the script, check each address and message, and use its test-email action before considering any send action. Its 45-second pause and next-five option are operational conveniences, not compliance or deliverability guarantees.
 
-### Author Deduplication
+## Tests
 
-If the same author appears in multiple tweet results, the script keeps only one row with:
-
-- The **highest-engagement tweet** (likes + retweets)
-- **Merged emails** from all their tweets and bio
-
-### Email Extraction
-
-The script checks two sources for each author:
-
-1. **Bio text** - Many Twitter users include their email in their bio
-2. **Tweet text** - Occasionally people share their email in tweets
-
-False positives are filtered out (image files, noreply addresses, placeholder emails).
-
-### Website Detection
-
-The script looks for websites in:
-
-1. **Profile URL** field - The website listed in their Twitter profile
-2. **Tweet URLs** - External links shared in their tweets (filtering out twitter.com, x.com, t.co, etc.)
-
-## Tips
-
-- **Twitter bios are goldmines**: Many creators and founders list their email or website in their bio
-- **Smaller accounts respond more**: Authors with 1K-50K followers have the highest reply rates for outreach
-- **Target niche creators**: Build a focused list of profiles in your industry for better results
-- **Check websites**: Even without an email, the website field often leads to contact pages
-- **Founders are responsive**: Target profiles of people who are actively building and shipping
-- **No rate limits**: Bright Data handles all the scraping infrastructure
-
-## Sending Emails (Google Apps Script)
-
-The `apps_script.gs` file is a Google Apps Script that sends personalized outreach emails directly from Google Sheets.
-
-### Setup
-
-1. Create a Google Sheet with columns: `profile_name`, `email`, `followers`, `subject`, `body`, `status`
-2. Import your scraped data into the sheet
-3. Go to **Extensions > Apps Script**
-4. Paste the contents of `apps_script.gs`
-5. Save and refresh the sheet
-6. Use the new **Outreach** menu to send emails
-
-## Running Tests
-
-The project includes unit tests and end-to-end tests against the live Bright Data API.
+The tests use Python's unittest; collection is mocked for local tests. Run:
 
 ```bash
-# Install pytest (if not already installed)
-pip install pytest
-
-# Run unit tests only (no API key needed, runs in <1 second)
-pytest -m "not e2e" -v
-
-# Run everything including live API tests (requires API key, ~2-3 minutes)
-export BRIGHT_DATA_API_KEY=your-api-key-here
-pytest -v
+python3 test_scraper.py TestUnit
 ```
 
-E2E tests are automatically skipped when no API key is set.
+The integration test is separate. Run it only when an API request and possible usage charge are intended:
 
-## Troubleshooting
+```bash
+python3 test_scraper.py TestE2E
+```
 
-| Problem                               | Solution                                                               |
-| ------------------------------------- | ---------------------------------------------------------------------- |
-| `ERROR: Set your Bright Data API key` | You forgot to set the environment variable (see Setup Step 2)          |
-| `HTTP 401`                            | Your API key is wrong or expired                                       |
-| `HTTP 400`                            | Check that your Bright Data account has the Twitter/X datasets enabled |
-| `Collection timed out`                | Try with fewer profiles or check your internet connection              |
-| Script hangs at "Triggering..."       | The API call can take 30-60 seconds, this is normal                    |
-| `0 authors found`                     | The profiles might not have recent tweets, try other accounts          |
+## FAQ
 
-## Cost
+**Does it find X users who need my product?** No. It only collects posts from the profiles you supply.
 
-This uses Bright Data's **Web Scraper API** with one Twitter/X dataset:
+**Is `top_tweet` the account's best-performing post?** It is the highest likes-plus-reposts record among the posts returned for this run, not necessarily the account's all-time or complete set of posts.
 
-- **Twitter/X Posts** dataset: discovers tweets by profile and extracts author info
+**Does the script contact account owners?** No. It only writes a CSV. The optional Apps Script can send email if separately configured and explicitly run.
 
-Pricing depends on your Bright Data plan. A typical run with 3 profiles costs roughly a few cents.
+**Are emails verified?** No. They are pattern matches in public text fields.
 
-## Need a custom scraper?
-
-If you need different Twitter/X data fields or a collection flow this tool does not support, you can build your own with [Bright Data's Scraper Studio](https://brightdata.com/products/scraper-studio). Describe the Twitter/X data you need in plain English, and Scraper Studio generates a production-ready scraper with your exact output schema. It includes self-healing, so when X changes its page layout, you describe the fix and push a patch in minutes instead of rewriting parsers.
-
-## Free tier
-
-Every Bright Data account comes with 5,000 free credits per month (roughly $7.50 in value). Credits reset on the first of each month, and no credit card is needed to start. That is enough to scrape tweets from several profiles, verify the email and contact extraction, and evaluate whether this tool fits your outreach workflow.
-
-## Disclaimer
-
-Some links in this README are affiliate links. If you sign up for Bright Data through them, you may get extra credits on your account, and I may receive a small commission. This doesn't cost you anything extra -- it helps support the project.
+**Can it run offline?** Unit tests can run locally; collecting X data requires internet and Bright Data API access.
 
 ## License
 
